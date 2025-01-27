@@ -10,35 +10,42 @@ import os
 import time
 # import spaces  # Import spaces for ZeroGPU compatibility
 
-
-# Load model and processor
+# 1. Load model and processor
 model_path = "deepseek-ai/Janus-Pro-7B"
 config = AutoConfig.from_pretrained(model_path)
 language_config = config.language_config
 language_config._attn_implementation = 'eager'
-vl_gpt = AutoModelForCausalLM.from_pretrained(model_path,
-                                             language_config=language_config,
-                                             trust_remote_code=True)
-if torch.cuda.is_available():
-    vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
+
+# 2. Check for MPS availability, otherwise fall back to CPU
+if torch.backends.mps.is_available():
+    device = torch.device('mps')
+    print("Using MPS (Metal Performance Shaders)")
 else:
-    vl_gpt = vl_gpt.to(torch.float16)
+    device = torch.device('cpu')
+    print("Using CPU")
+
+# 3. Load model in float32, then move to MPS or CPU
+vl_gpt = AutoModelForCausalLM.from_pretrained(
+    model_path,
+    language_config=language_config,
+    trust_remote_code=True,
+    torch_dtype=torch.float32  # Attempt to load everything in float32
+)
+vl_gpt = vl_gpt.float().to(device)
 
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
-cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+cuda_device = device
 
 @torch.inference_mode()
-# @spaces.GPU(duration=120) 
-# Multimodal Understanding function
 def multimodal_understanding(image, question, seed, top_p, temperature):
-    # Clear CUDA cache before generating
-    torch.cuda.empty_cache()
+    # Clear cache if using CUDA
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     
     # set seed
     torch.manual_seed(seed)
     np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
     
     conversation = [
         {
@@ -52,8 +59,7 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     pil_images = [Image.fromarray(image)]
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
-    ).to(cuda_device, dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16)
-    
+    ).to(cuda_device)
     
     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
     
@@ -64,7 +70,7 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         max_new_tokens=512,
-        do_sample=False if temperature == 0 else True,
+        do_sample=(temperature != 0),
         use_cache=True,
         temperature=temperature,
         top_p=top_p,
@@ -72,7 +78,6 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     
     answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
     return answer
-
 
 def generate(input_ids,
              width,
@@ -82,8 +87,9 @@ def generate(input_ids,
              cfg_weight: float = 5,
              image_token_num_per_image: int = 576,
              patch_size: int = 16):
-    # Clear CUDA cache before generating
-    torch.cuda.empty_cache()
+    # Clear cache if using CUDA
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     
     tokens = torch.zeros((parallel_size * 2, len(input_ids)), dtype=torch.int).to(cuda_device)
     for i in range(parallel_size * 2):
@@ -97,8 +103,8 @@ def generate(input_ids,
     for i in range(image_token_num_per_image):
         with torch.no_grad():
             outputs = vl_gpt.language_model.model(inputs_embeds=inputs_embeds,
-                                                use_cache=True,
-                                                past_key_values=pkv)
+                                                  use_cache=True,
+                                                  past_key_values=pkv)
             pkv = outputs.past_key_values
             hidden_states = outputs.last_hidden_state
             logits = vl_gpt.gen_head(hidden_states[:, -1, :])
@@ -113,10 +119,10 @@ def generate(input_ids,
             img_embeds = vl_gpt.prepare_gen_img_embeds(next_token)
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
-    
-
-    patches = vl_gpt.gen_vision_model.decode_code(generated_tokens.to(dtype=torch.int),
-                                                 shape=[parallel_size, 8, width // patch_size, height // patch_size])
+    patches = vl_gpt.gen_vision_model.decode_code(
+        generated_tokens.to(dtype=torch.int),
+        shape=[parallel_size, 8, width // patch_size, height // patch_size]
+    )
 
     return generated_tokens.to(dtype=torch.int), patches
 
@@ -126,54 +132,60 @@ def unpack(dec, width, height, parallel_size=5):
 
     visual_img = np.zeros((parallel_size, width, height, 3), dtype=np.uint8)
     visual_img[:, :, :] = dec
-
     return visual_img
 
-
-
 @torch.inference_mode()
-# @spaces.GPU(duration=120)  # Specify a duration to avoid timeout
 def generate_image(prompt,
                    seed=None,
                    guidance=5,
                    t2i_temperature=1.0):
-    # Clear CUDA cache and avoid tracking gradients
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
     # Set the seed for reproducible results
     if seed is not None:
         torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
         np.random.seed(seed)
+
     width = 384
     height = 384
     parallel_size = 5
     
     with torch.no_grad():
-        messages = [{'role': '<|User|>', 'content': prompt},
-                    {'role': '<|Assistant|>', 'content': ''}]
-        text = vl_chat_processor.apply_sft_template_for_multi_turn_prompts(conversations=messages,
-                                                                   sft_format=vl_chat_processor.sft_format,
-                                                                   system_prompt='')
+        messages = [
+            {'role': '<|User|>', 'content': prompt},
+            {'role': '<|Assistant|>', 'content': ''}
+        ]
+        text = vl_chat_processor.apply_sft_template_for_multi_turn_prompts(
+            conversations=messages,
+            sft_format=vl_chat_processor.sft_format,
+            system_prompt=''
+        )
         text = text + vl_chat_processor.image_start_tag
         
         input_ids = torch.LongTensor(tokenizer.encode(text))
-        output, patches = generate(input_ids,
-                                   width // 16 * 16,
-                                   height // 16 * 16,
-                                   cfg_weight=guidance,
-                                   parallel_size=parallel_size,
-                                   temperature=t2i_temperature)
-        images = unpack(patches,
-                        width // 16 * 16,
-                        height // 16 * 16,
-                        parallel_size=parallel_size)
+        output, patches = generate(
+            input_ids,
+            width // 16 * 16,
+            height // 16 * 16,
+            cfg_weight=guidance,
+            parallel_size=parallel_size,
+            temperature=t2i_temperature
+        )
+        images = unpack(
+            patches,
+            width // 16 * 16,
+            height // 16 * 16,
+            parallel_size=parallel_size
+        )
 
-        return [Image.fromarray(images[i]).resize((768, 768), Image.LANCZOS) for i in range(parallel_size)]
+        return [Image.fromarray(images[i]).resize((768, 768), Image.LANCZOS)
+                for i in range(parallel_size)]
         
 
 # Gradio interface
 with gr.Blocks() as demo:
-    gr.Markdown(value="# Multimodal Understanding")
+    gr.Markdown("# Multimodal Understanding")
     with gr.Row():
         image_input = gr.Image()
         with gr.Column():
@@ -188,22 +200,13 @@ with gr.Blocks() as demo:
     examples_inpainting = gr.Examples(
         label="Multimodal Understanding examples",
         examples=[
-            [
-                "explain this meme",
-                "images/doge.png",
-            ],
-            [
-                "Convert the formula into latex code.",
-                "images/equation.png",
-            ],
+            ["explain this meme", "images/doge.png"],
+            ["Convert the formula into latex code.", "images/equation.png"],
         ],
         inputs=[question_input, image_input],
     )
     
-        
-    gr.Markdown(value="# Text-to-Image Generation")
-
-    
+    gr.Markdown("# Text-to-Image Generation")
     
     with gr.Row():
         cfg_weight_input = gr.Slider(minimum=1, maximum=10, value=5, step=0.5, label="CFG Weight")
@@ -224,7 +227,7 @@ with gr.Blocks() as demo:
             "Astronaut in a jungle, cold color palette, muted colors, detailed, 8k",
             "A glass of red wine on a reflective surface.",
             "A cute and adorable baby fox with big brown eyes, autumn leaves in the background enchanting,immortal,fluffy, shiny mane,Petals,fairyism,unreal engine 5 and Octane Render,highly detailed, photorealistic, cinematic, natural colors.",
-            "The image features an intricately designed eye set against a circular backdrop adorned with ornate swirl patterns that evoke both realism and surrealism. At the center of attention is a strikingly vivid blue iris surrounded by delicate veins radiating outward from the pupil to create depth and intensity. The eyelashes are long and dark, casting subtle shadows on the skin around them which appears smooth yet slightly textured as if aged or weathered over time.\n\nAbove the eye, there's a stone-like structure resembling part of classical architecture, adding layers of mystery and timeless elegance to the composition. This architectural element contrasts sharply but harmoniously with the organic curves surrounding it. Below the eye lies another decorative motif reminiscent of baroque artistry, further enhancing the overall sense of eternity encapsulated within each meticulously crafted detail. \n\nOverall, the atmosphere exudes a mysterious aura intertwined seamlessly with elements suggesting timelessness, achieved through the juxtaposition of realistic textures and surreal artistic flourishes. Each component\u2014from the intricate designs framing the eye to the ancient-looking stone piece above\u2014contributes uniquely towards creating a visually captivating tableau imbued with enigmatic allure.",
+            "The image features an intricately designed eye set against a circular backdrop adorned with ornate swirl patterns...",
         ],
         inputs=prompt_input,
     )
@@ -242,4 +245,3 @@ with gr.Blocks() as demo:
     )
 
 demo.launch(share=True)
-# demo.queue(concurrency_count=1, max_size=10).launch(server_name="0.0.0.0", server_port=37906, root_path="/path")
