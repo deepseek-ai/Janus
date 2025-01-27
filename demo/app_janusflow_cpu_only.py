@@ -5,7 +5,7 @@ from PIL import Image
 from diffusers.models import AutoencoderKL
 import numpy as np
 
-cuda_device = "cuda" if torch.cuda.is_available() else "cpu"
+cuda_device = "cpu"
 
 # Load model and processor
 model_path = "deepseek-ai/JanusFlow-1.3B"
@@ -22,15 +22,10 @@ vae = vae.to(torch.bfloat16).to(cuda_device).eval()
 
 # Multimodal Understanding function
 @torch.inference_mode()
-# Multimodal Understanding function
 def multimodal_understanding(image, question, seed, top_p, temperature):
-    # Clear CUDA cache before generating
-    torch.cuda.empty_cache()
-
-    # set seed
+    # 修改种子设置
     torch.manual_seed(seed)
     np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
 
     conversation = [
         {
@@ -44,10 +39,7 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     pil_images = [Image.fromarray(image)]
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
-    ).to(
-        cuda_device,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
-    )
+    ).to(cuda_device, dtype=torch.bfloat16)
 
     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
 
@@ -71,8 +63,8 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
 
 @torch.inference_mode()
 def generate(input_ids, cfg_weight: float = 2.0, num_inference_steps: int = 30):
-    # we generate 5 images at a time, *2 for CFG
-    tokens = torch.stack([input_ids] * 10).cuda()
+    # 修改设备设置
+    tokens = torch.stack([input_ids] * 10).to(cuda_device)
     tokens[5:, 1:] = vl_chat_processor.pad_id
     inputs_embeds = vl_gpt.language_model.get_input_embeddings()(tokens)
     print(inputs_embeds.shape)
@@ -82,10 +74,11 @@ def generate(input_ids, cfg_weight: float = 2.0, num_inference_steps: int = 30):
 
     # generate with rectified flow ode
     # step 1: encode with vision_gen_enc
-    z = torch.randn((5, 4, 48, 48), dtype=torch.bfloat16).cuda()
+    # 修改设备设置
+    z = torch.randn((5, 4, 48, 48), dtype=torch.bfloat16).to(cuda_device)
 
     dt = 1.0 / num_inference_steps
-    dt = torch.zeros_like(z).cuda().to(torch.bfloat16) + dt
+    dt = torch.zeros_like(z).to(cuda_device).to(torch.bfloat16) + dt
 
     # step 2: run ode
     attention_mask = torch.ones((10, inputs_embeds.shape[1] + 577)).to(vl_gpt.device)
@@ -163,12 +156,9 @@ def unpack(dec, width, height, parallel_size=5):
 
 @torch.inference_mode()
 def generate_image(prompt, seed=None, guidance=5, num_inference_steps=30):
-    # Clear CUDA cache and avoid tracking gradients
-    torch.cuda.empty_cache()
-    # Set the seed for reproducible results
+    # 修改种子设置
     if seed is not None:
         torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
         np.random.seed(seed)
 
     with torch.no_grad():

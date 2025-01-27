@@ -1,53 +1,53 @@
 import gradio as gr
 import torch
-from janus.janusflow.models import MultiModalityCausalLM, VLChatProcessor
+from transformers import AutoConfig, AutoModelForCausalLM
+from janus.models import MultiModalityCausalLM, VLChatProcessor
+from janus.utils.io import load_pil_images
 from PIL import Image
-from diffusers.models import AutoencoderKL
-import numpy as np
 
-cuda_device = "cuda" if torch.cuda.is_available() else "cpu"
+import numpy as np
+import os
+import time
+
+# import spaces  # Import spaces for ZeroGPU compatibility
+
 
 # Load model and processor
-model_path = "deepseek-ai/JanusFlow-1.3B"
+model_path = "deepseek-ai/Janus-Pro-7B"
+config = AutoConfig.from_pretrained(model_path)
+language_config = config.language_config
+language_config._attn_implementation = "eager"
+vl_gpt = AutoModelForCausalLM.from_pretrained(
+    model_path, language_config=language_config, trust_remote_code=True
+)
+vl_gpt = vl_gpt.to(torch.float32)
+
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
-
-vl_gpt = MultiModalityCausalLM.from_pretrained(model_path)
-vl_gpt = vl_gpt.to(torch.bfloat16).to(cuda_device).eval()
-
-# remember to use bfloat16 dtype, this vae doesn't work with fp16
-vae = AutoencoderKL.from_pretrained("stabilityai/sdxl-vae")
-vae = vae.to(torch.bfloat16).to(cuda_device).eval()
+cuda_device = "cpu"
 
 
-# Multimodal Understanding function
 @torch.inference_mode()
+# @spaces.GPU(duration=120)
 # Multimodal Understanding function
 def multimodal_understanding(image, question, seed, top_p, temperature):
-    # Clear CUDA cache before generating
-    torch.cuda.empty_cache()
-
     # set seed
     torch.manual_seed(seed)
     np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
 
     conversation = [
         {
-            "role": "User",
+            "role": "<|User|>",
             "content": f"<image_placeholder>\n{question}",
             "images": [image],
         },
-        {"role": "Assistant", "content": ""},
+        {"role": "<|Assistant|>", "content": ""},
     ]
 
     pil_images = [Image.fromarray(image)]
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
-    ).to(
-        cuda_device,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
-    )
+    ).to(cuda_device, dtype=torch.float32)
 
     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
 
@@ -65,90 +65,62 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     )
 
     answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
-
     return answer
 
 
-@torch.inference_mode()
-def generate(input_ids, cfg_weight: float = 2.0, num_inference_steps: int = 30):
-    # we generate 5 images at a time, *2 for CFG
-    tokens = torch.stack([input_ids] * 10).cuda()
-    tokens[5:, 1:] = vl_chat_processor.pad_id
+def generate(
+    input_ids,
+    width,
+    height,
+    temperature: float = 1,
+    parallel_size: int = 5,
+    cfg_weight: float = 5,
+    image_token_num_per_image: int = 576,
+    patch_size: int = 16,
+):
+    # Clear CUDA cache before generating
+    torch.cuda.empty_cache()
+
+    tokens = torch.zeros((parallel_size * 2, len(input_ids)), dtype=torch.int).to(
+        cuda_device
+    )
+    for i in range(parallel_size * 2):
+        tokens[i, :] = input_ids
+        if i % 2 != 0:
+            tokens[i, 1:-1] = vl_chat_processor.pad_id
     inputs_embeds = vl_gpt.language_model.get_input_embeddings()(tokens)
-    print(inputs_embeds.shape)
+    generated_tokens = torch.zeros(
+        (parallel_size, image_token_num_per_image), dtype=torch.int
+    ).to(cuda_device)
 
-    # we remove the last <bog> token and replace it with t_emb later
-    inputs_embeds = inputs_embeds[:, :-1, :]
-
-    # generate with rectified flow ode
-    # step 1: encode with vision_gen_enc
-    z = torch.randn((5, 4, 48, 48), dtype=torch.bfloat16).cuda()
-
-    dt = 1.0 / num_inference_steps
-    dt = torch.zeros_like(z).cuda().to(torch.bfloat16) + dt
-
-    # step 2: run ode
-    attention_mask = torch.ones((10, inputs_embeds.shape[1] + 577)).to(vl_gpt.device)
-    attention_mask[5:, 1 : inputs_embeds.shape[1]] = 0
-    attention_mask = attention_mask.int()
-    for step in range(num_inference_steps):
-        # prepare inputs for the llm
-        z_input = torch.cat([z, z], dim=0)  # for cfg
-        t = step / num_inference_steps * 1000.0
-        t = torch.tensor([t] * z_input.shape[0]).to(dt)
-        z_enc = vl_gpt.vision_gen_enc_model(z_input, t)
-        z_emb, t_emb, hs = z_enc[0], z_enc[1], z_enc[2]
-        z_emb = z_emb.view(z_emb.shape[0], z_emb.shape[1], -1).permute(0, 2, 1)
-        z_emb = vl_gpt.vision_gen_enc_aligner(z_emb)
-        llm_emb = torch.cat([inputs_embeds, t_emb.unsqueeze(1), z_emb], dim=1)
-
-        # input to the llm
-        # we apply attention mask for CFG: 1 for tokens that are not masked, 0 for tokens that are masked.
-        if step == 0:
+    pkv = None
+    for i in range(image_token_num_per_image):
+        with torch.no_grad():
             outputs = vl_gpt.language_model.model(
-                inputs_embeds=llm_emb,
-                use_cache=True,
-                attention_mask=attention_mask,
-                past_key_values=None,
+                inputs_embeds=inputs_embeds, use_cache=True, past_key_values=pkv
             )
-            past_key_values = []
-            for kv_cache in past_key_values:
-                k, v = kv_cache[0], kv_cache[1]
-                past_key_values.append(
-                    (
-                        k[:, :, : inputs_embeds.shape[1], :],
-                        v[:, :, : inputs_embeds.shape[1], :],
-                    )
-                )
-            past_key_values = tuple(past_key_values)
-        else:
-            outputs = vl_gpt.language_model.model(
-                inputs_embeds=llm_emb,
-                use_cache=True,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-        hidden_states = outputs.last_hidden_state
+            pkv = outputs.past_key_values
+            hidden_states = outputs.last_hidden_state
+            logits = vl_gpt.gen_head(hidden_states[:, -1, :])
+            logit_cond = logits[0::2, :]
+            logit_uncond = logits[1::2, :]
+            logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
+            probs = torch.softmax(logits / temperature, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
+            generated_tokens[:, i] = next_token.squeeze(dim=-1)
+            next_token = torch.cat(
+                [next_token.unsqueeze(dim=1), next_token.unsqueeze(dim=1)], dim=1
+            ).view(-1)
 
-        # transform hidden_states back to v
-        hidden_states = vl_gpt.vision_gen_dec_aligner(
-            vl_gpt.vision_gen_dec_aligner_norm(hidden_states[:, -576:, :])
-        )
-        hidden_states = hidden_states.reshape(z_emb.shape[0], 24, 24, 768).permute(
-            0, 3, 1, 2
-        )
-        v = vl_gpt.vision_gen_dec_model(hidden_states, hs, t_emb)
-        v_cond, v_uncond = torch.chunk(v, 2)
-        v = cfg_weight * v_cond - (cfg_weight - 1.0) * v_uncond
-        z = z + dt * v
+            img_embeds = vl_gpt.prepare_gen_img_embeds(next_token)
+            inputs_embeds = img_embeds.unsqueeze(dim=1)
 
-    # step 3: decode with vision_gen_dec and sdxl vae
-    decoded_image = vae.decode(z / vae.config.scaling_factor).sample
+    patches = vl_gpt.gen_vision_model.decode_code(
+        generated_tokens.to(dtype=torch.int),
+        shape=[parallel_size, 8, width // patch_size, height // patch_size],
+    )
 
-    images = decoded_image.float().clip_(-1.0, 1.0).permute(0, 2, 3, 1).cpu().numpy()
-    images = ((images + 1) / 2.0 * 255).astype(np.uint8)
-
-    return images
+    return generated_tokens.to(dtype=torch.int), patches
 
 
 def unpack(dec, width, height, parallel_size=5):
@@ -162,19 +134,20 @@ def unpack(dec, width, height, parallel_size=5):
 
 
 @torch.inference_mode()
-def generate_image(prompt, seed=None, guidance=5, num_inference_steps=30):
-    # Clear CUDA cache and avoid tracking gradients
-    torch.cuda.empty_cache()
+# @spaces.GPU(duration=120)  # Specify a duration to avoid timeout
+def generate_image(prompt, seed=None, guidance=5, t2i_temperature=1.0):
     # Set the seed for reproducible results
     if seed is not None:
         torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
         np.random.seed(seed)
+    width = 384
+    height = 384
+    parallel_size = 5
 
     with torch.no_grad():
         messages = [
-            {"role": "User", "content": prompt},
-            {"role": "Assistant", "content": ""},
+            {"role": "<|User|>", "content": prompt},
+            {"role": "<|Assistant|>", "content": ""},
         ]
         text = vl_chat_processor.apply_sft_template_for_multi_turn_prompts(
             conversations=messages,
@@ -182,20 +155,29 @@ def generate_image(prompt, seed=None, guidance=5, num_inference_steps=30):
             system_prompt="",
         )
         text = text + vl_chat_processor.image_start_tag
+
         input_ids = torch.LongTensor(tokenizer.encode(text))
-        images = generate(
-            input_ids, cfg_weight=guidance, num_inference_steps=num_inference_steps
+        output, patches = generate(
+            input_ids,
+            width // 16 * 16,
+            height // 16 * 16,
+            cfg_weight=guidance,
+            parallel_size=parallel_size,
+            temperature=t2i_temperature,
         )
+        images = unpack(
+            patches, width // 16 * 16, height // 16 * 16, parallel_size=parallel_size
+        )
+
         return [
-            Image.fromarray(images[i]).resize((1024, 1024), Image.LANCZOS)
-            for i in range(images.shape[0])
+            Image.fromarray(images[i]).resize((768, 768), Image.LANCZOS)
+            for i in range(parallel_size)
         ]
 
 
 # Gradio interface
 with gr.Blocks() as demo:
     gr.Markdown(value="# Multimodal Understanding")
-    # with gr.Row():
     with gr.Row():
         image_input = gr.Image()
         with gr.Column():
@@ -216,11 +198,11 @@ with gr.Blocks() as demo:
         examples=[
             [
                 "explain this meme",
-                "./images/doge.png",
+                "images/doge.png",
             ],
             [
                 "Convert the formula into latex code.",
-                "./images/equation.png",
+                "images/equation.png",
             ],
         ],
         inputs=[question_input, image_input],
@@ -230,13 +212,15 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         cfg_weight_input = gr.Slider(
-            minimum=1, maximum=10, value=2, step=0.5, label="CFG Weight"
+            minimum=1, maximum=10, value=5, step=0.5, label="CFG Weight"
         )
-        step_input = gr.Slider(
-            minimum=1, maximum=50, value=30, step=1, label="Number of Inference Steps"
+        t2i_temperature = gr.Slider(
+            minimum=0, maximum=1, value=1.0, step=0.05, label="temperature"
         )
 
-    prompt_input = gr.Textbox(label="Prompt")
+    prompt_input = gr.Textbox(
+        label="Prompt. (Prompt in more detail can help produce better images!)"
+    )
     seed_input = gr.Number(label="Seed (Optional)", precision=0, value=12345)
 
     generation_button = gr.Button("Generate Images")
@@ -247,6 +231,9 @@ with gr.Blocks() as demo:
         label="Text to image generation examples.",
         examples=[
             "Master shifu racoon wearing drip attire as a street gangster.",
+            "The face of a beautiful girl",
+            "Astronaut in a jungle, cold color palette, muted colors, detailed, 8k",
+            "A glass of red wine on a reflective surface.",
             "A cute and adorable baby fox with big brown eyes, autumn leaves in the background enchanting,immortal,fluffy, shiny mane,Petals,fairyism,unreal engine 5 and Octane Render,highly detailed, photorealistic, cinematic, natural colors.",
             "The image features an intricately designed eye set against a circular backdrop adorned with ornate swirl patterns that evoke both realism and surrealism. At the center of attention is a strikingly vivid blue iris surrounded by delicate veins radiating outward from the pupil to create depth and intensity. The eyelashes are long and dark, casting subtle shadows on the skin around them which appears smooth yet slightly textured as if aged or weathered over time.\n\nAbove the eye, there's a stone-like structure resembling part of classical architecture, adding layers of mystery and timeless elegance to the composition. This architectural element contrasts sharply but harmoniously with the organic curves surrounding it. Below the eye lies another decorative motif reminiscent of baroque artistry, further enhancing the overall sense of eternity encapsulated within each meticulously crafted detail. \n\nOverall, the atmosphere exudes a mysterious aura intertwined seamlessly with elements suggesting timelessness, achieved through the juxtaposition of realistic textures and surreal artistic flourishes. Each component\u2014from the intricate designs framing the eye to the ancient-looking stone piece above\u2014contributes uniquely towards creating a visually captivating tableau imbued with enigmatic allure.",
         ],
@@ -261,8 +248,9 @@ with gr.Blocks() as demo:
 
     generation_button.click(
         fn=generate_image,
-        inputs=[prompt_input, seed_input, cfg_weight_input, step_input],
+        inputs=[prompt_input, seed_input, cfg_weight_input, t2i_temperature],
         outputs=image_output,
     )
 
 demo.launch(share=True)
+# demo.queue(concurrency_count=1, max_size=10).launch(server_name="0.0.0.0", server_port=37906, root_path="/path")
