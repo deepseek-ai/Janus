@@ -27,6 +27,9 @@ from transformers.processing_utils import ProcessorMixin
 
 from janus.models.image_processing_vlm import VLMImageProcessor
 from janus.utils.conversation import get_conv_template
+from janus.utils.cuda_memory_manager import (
+    monitor_memory,
+)
 
 
 class DictOutput(object):
@@ -354,6 +357,7 @@ class VLChatProcessor(ProcessorMixin):
 
         return prepare
 
+    @monitor_memory(threshold_gb=2.0)
     def batchify(
         self, prepare_list: List[VLChatProcessorOutput]
     ) -> BatchedVLChatProcessorOutput:

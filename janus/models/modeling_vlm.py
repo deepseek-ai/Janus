@@ -31,6 +31,9 @@ from transformers.configuration_utils import PretrainedConfig
 
 from janus.models.clip_encoder import CLIPVisionTower
 from janus.models.projector import MlpProjector
+from janus.utils.cuda_memory_manager import (
+    monitor_memory,
+)
 
 
 class vision_head(torch.nn.Module):
@@ -218,6 +221,7 @@ class MultiModalityCausalLM(MultiModalityPreTrainedModel):
         language_config = config.language_config
         self.language_model = LlamaForCausalLM(language_config)
 
+    @monitor_critical_memory(threshold_gb=2.0)
     def prepare_inputs_embeds(
         self,
         input_ids: torch.LongTensor,
@@ -259,6 +263,7 @@ class MultiModalityCausalLM(MultiModalityPreTrainedModel):
 
         return inputs_embeds
 
+    @monitor_critical_memory(threshold_gb=2.0)
     def prepare_gen_img_embeds(self, image_ids: torch.LongTensor):
         return self.gen_aligner(self.gen_embed(image_ids))
 

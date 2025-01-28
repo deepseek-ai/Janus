@@ -21,6 +21,9 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from janus.models import MultiModalityCausalLM, VLChatProcessor
+from janus.utils.cuda_memory_manager import (
+    monitor_memory,
+)
 import numpy as np
 import os
 import PIL.Image
@@ -51,6 +54,7 @@ sft_format = vl_chat_processor.apply_sft_template_for_multi_turn_prompts(
 prompt = sft_format + vl_chat_processor.image_start_tag
 
 
+@monitor_critical_memory(threshold_gb=2.0)
 @torch.inference_mode()
 def generate(
     mmgpt: MultiModalityCausalLM,
