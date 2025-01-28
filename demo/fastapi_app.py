@@ -9,6 +9,16 @@ import io
 
 app = FastAPI()
 
+# Device and dtype configuration
+def get_device_and_dtype():
+    if torch.cuda.is_available():
+        return 'cuda', torch.bfloat16
+    elif torch.backends.mps.is_available():
+        return 'mps', torch.float16
+    return 'cpu', torch.float32
+
+device, dtype = get_device_and_dtype()
+
 # Load model and processor
 model_path = "deepseek-ai/Janus-1.3B"
 config = AutoConfig.from_pretrained(model_path)
@@ -17,19 +27,19 @@ language_config._attn_implementation = 'eager'
 vl_gpt = AutoModelForCausalLM.from_pretrained(model_path,
                                               language_config=language_config,
                                               trust_remote_code=True)
-vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
+vl_gpt = vl_gpt.to(dtype).to(device)
 
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
-cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 @torch.inference_mode()
 def multimodal_understanding(image_data, question, seed, top_p, temperature):
-    torch.cuda.empty_cache()
+    torch.cuda.empty_cache() if device == 'cuda' else None
     torch.manual_seed(seed)
     np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
+    if device == 'cuda':
+        torch.cuda.manual_seed(seed)
 
     conversation = [
         {
@@ -43,7 +53,7 @@ def multimodal_understanding(image_data, question, seed, top_p, temperature):
     pil_images = [Image.open(io.BytesIO(image_data))]
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
-    ).to(cuda_device, dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16)
+    ).to(device, dtype=dtype)
     
     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
     outputs = vl_gpt.language_model.generate(
@@ -84,14 +94,14 @@ def generate(input_ids,
              cfg_weight: float = 5,
              image_token_num_per_image: int = 576,
              patch_size: int = 16):
-    torch.cuda.empty_cache()
-    tokens = torch.zeros((parallel_size * 2, len(input_ids)), dtype=torch.int).to(cuda_device)
+    torch.cuda.empty_cache() if device == 'cuda' else None
+    tokens = torch.zeros((parallel_size * 2, len(input_ids)), dtype=torch.int).to(device)
     for i in range(parallel_size * 2):
         tokens[i, :] = input_ids
         if i % 2 != 0:
             tokens[i, 1:-1] = vl_chat_processor.pad_id
     inputs_embeds = vl_gpt.language_model.get_input_embeddings()(tokens)
-    generated_tokens = torch.zeros((parallel_size, image_token_num_per_image), dtype=torch.int).to(cuda_device)
+    generated_tokens = torch.zeros((parallel_size, image_token_num_per_image), dtype=torch.int).to(device)
 
     pkv = None
     for i in range(image_token_num_per_image):
@@ -128,10 +138,11 @@ def unpack(dec, width, height, parallel_size=5):
 
 @torch.inference_mode()
 def generate_image(prompt, seed, guidance):
-    torch.cuda.empty_cache()
+    torch.cuda.empty_cache() if device == 'cuda' else None
     seed = seed if seed is not None else 12345
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    if device == 'cuda':
+        torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     width = 384
     height = 384
