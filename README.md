@@ -129,6 +129,7 @@ On the basis of `Python >= 3.8` environment, install the necessary dependencies 
 pip install -e .
 ```
 
+Please note: As at January 2025, 'torch' does support Python 3.13. Please use and earlier version of Python. 
 
 ### Simple Inference Example
 
