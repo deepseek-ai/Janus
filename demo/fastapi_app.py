@@ -6,11 +6,12 @@ from janus.models import MultiModalityCausalLM, VLChatProcessor
 from PIL import Image
 import numpy as np
 import io
+import os
 
 app = FastAPI()
 
 # Load model and processor
-model_path = "deepseek-ai/Janus-1.3B"
+model_path = os.getenv("MODEL_NAME", "deepseek-ai/Janus-1.3B")
 config = AutoConfig.from_pretrained(model_path)
 language_config = config.language_config
 language_config._attn_implementation = 'eager'
