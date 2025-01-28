@@ -63,7 +63,7 @@ def multimodal_understanding(image_data, question, seed, top_p, temperature):
     return answer
 
 
-@app.post("/understand_image_and_question/")
+@app.post("/understand_image_and_question")
 async def understand_image_and_question(
     file: UploadFile = File(...),
     question: str = Form(...),
@@ -152,7 +152,7 @@ def generate_image(prompt, seed, guidance):
         return [Image.fromarray(images[i]).resize((1024, 1024), Image.LANCZOS) for i in range(parallel_size)]
 
 
-@app.post("/generate_images/")
+@app.post("/generate_images")
 async def generate_images(
     prompt: str = Form(...),
     seed: int = Form(None),
