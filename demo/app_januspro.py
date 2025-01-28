@@ -15,10 +15,10 @@ if torch.cuda.is_available():
     dtype = torch.bfloat16
 elif torch.backends.mps.is_available():
     device = 'mps'
-    dtype = torch.float16
+    dtype = torch.float32  # MPS设备使用float32
 else:
     device = 'cpu'
-    dtype = torch.float16
+    dtype = torch.float32  # CPU设备使用float32
 
 # Load model and processor
 model_path = "deepseek-ai/Janus-Pro-7B"
