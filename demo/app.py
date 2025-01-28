@@ -3,21 +3,23 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 from PIL import Image
+import os
 
 import numpy as np
 
 
 # Load model and processor
-model_path = "deepseek-ai/Janus-1.3B"
-config = AutoConfig.from_pretrained(model_path)
+model_path = os.getenv('MODEL_PATH_APP')
+config = AutoConfig.from_pretrained(model_path, local_files_only=True)
 language_config = config.language_config
 language_config._attn_implementation = 'eager'
 vl_gpt = AutoModelForCausalLM.from_pretrained(model_path,
-                                             language_config=language_config,
-                                             trust_remote_code=True)
+                                           language_config=language_config,
+                                           trust_remote_code=True,
+                                           local_files_only=True)
 vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
 
-vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
+vl_chat_processor = VLChatProcessor.from_pretrained(model_path, local_files_only=True)
 tokenizer = vl_chat_processor.tokenizer
 cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # Multimodal Understanding function

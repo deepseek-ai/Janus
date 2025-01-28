@@ -12,19 +12,20 @@ import time
 
 
 # Load model and processor
-model_path = "deepseek-ai/Janus-Pro-7B"
-config = AutoConfig.from_pretrained(model_path)
+model_path = os.getenv('MODEL_PATH_APP_JANUSPRO')
+config = AutoConfig.from_pretrained(model_path, local_files_only=True)
 language_config = config.language_config
 language_config._attn_implementation = 'eager'
 vl_gpt = AutoModelForCausalLM.from_pretrained(model_path,
-                                             language_config=language_config,
-                                             trust_remote_code=True)
+                                           language_config=language_config,
+                                           trust_remote_code=True,
+                                           local_files_only=True)
 if torch.cuda.is_available():
     vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
 else:
     vl_gpt = vl_gpt.to(torch.float16)
 
-vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
+vl_chat_processor = VLChatProcessor.from_pretrained(model_path, local_files_only=True)
 tokenizer = vl_chat_processor.tokenizer
 cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 

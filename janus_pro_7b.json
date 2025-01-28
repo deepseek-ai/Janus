@@ -1,0 +1,30 @@
+{
+  "version": "0.1",
+  "type": "container",
+  "meta": {
+    "trigger": "cli"
+  },
+  "ops": [
+    {
+      "type": "container/run",
+      "id": "janus_pro_7b",
+      "args": {
+        "cmd": [],
+        "image": "k1llahkeezy/janus-pro:0.0.3",
+        "gpu": true,
+        "expose": 7860,
+        "env": {
+          "MODEL_PATH_APP_JANUSPRO": "models/models-deepseek-ai-Janus-Pro-7B",
+          "GRADIO_SERVER_NAME": "0.0.0.0"
+        },
+        "resources": [
+          {
+            "type": "S3",
+            "url": "https://models.nosana.io/hugging-face/deepseek/janus/models-deepseek-ai-Janus-Pro/7B",
+            "target": "/Janus/models/models-deepseek-ai-Janus-Pro-7B"
+          }
+        ]
+      }
+    }
+  ]
+} 
