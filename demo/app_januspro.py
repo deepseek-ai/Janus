@@ -33,6 +33,12 @@ vl_gpt = AutoModelForCausalLM.from_pretrained(
 )
 vl_gpt = vl_gpt.float().to(device)
 
+for name, module in vl_gpt.named_modules():
+    if isinstance(module, torch.nn.Module):
+        module.float()
+vl_gpt.to(device)
+
+
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
 cuda_device = device
@@ -57,11 +63,18 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     ]
     
     pil_images = [Image.fromarray(image)]
+
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
-    ).to(cuda_device)
+    ).to(cuda_device, dtype=torch.float32)
     
-    inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
+    # Option 1: Just remove the autocast context entirely
+    # with torch.autocast("mps", dtype=torch.float32"):
+    #     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
+
+    # OR Option 2: explicitly disable autocast
+    with torch.autocast("mps", enabled=False):
+        inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
     
     outputs = vl_gpt.language_model.generate(
         inputs_embeds=inputs_embeds,
@@ -244,4 +257,4 @@ with gr.Blocks() as demo:
         outputs=image_output
     )
 
-demo.launch(share=True)
+demo.launch(share=False)
