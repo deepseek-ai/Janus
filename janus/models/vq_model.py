@@ -415,13 +415,8 @@ class Upsample(nn.Module):
             )
 
     def forward(self, x):
-        if x.dtype != torch.float32:
-            x = F.interpolate(x.to(torch.float), scale_factor=2.0, mode="nearest").to(
-                torch.bfloat16
-            )
-        else:
-            x = F.interpolate(x, scale_factor=2.0, mode="nearest")
-
+        # Remove forced casting. Just interpolate in x's current dtype.
+        x = F.interpolate(x, scale_factor=2.0, mode="nearest")
         if self.with_conv:
             x = self.conv(x)
         return x
