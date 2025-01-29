@@ -107,7 +107,7 @@ class CLIPVisionTower(nn.Module):
             raise ValueError(f"Unexpected select feature: {self.select_feature}")
         return image_features
 
-    @monitor_critical_memory(threshold_gb=2.0)
+    @monitor_memory(warning_threshold_gb=1.5, track_stats=True)
     def forward(self, images):
         """
 

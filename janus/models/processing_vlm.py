@@ -357,7 +357,7 @@ class VLChatProcessor(ProcessorMixin):
 
         return prepare
 
-    @monitor_memory(threshold_gb=2.0)
+    @monitor_memory(warning_threshold_gb=1.5, track_stats=True)
     def batchify(
         self, prepare_list: List[VLChatProcessorOutput]
     ) -> BatchedVLChatProcessorOutput:

@@ -221,7 +221,7 @@ class MultiModalityCausalLM(MultiModalityPreTrainedModel):
         language_config = config.language_config
         self.language_model = LlamaForCausalLM(language_config)
 
-    @monitor_critical_memory(threshold_gb=2.0)
+    @monitor_memory(warning_threshold_gb=1.5, track_stats=True)
     def prepare_inputs_embeds(
         self,
         input_ids: torch.LongTensor,
@@ -263,7 +263,7 @@ class MultiModalityCausalLM(MultiModalityPreTrainedModel):
 
         return inputs_embeds
 
-    @monitor_critical_memory(threshold_gb=2.0)
+    @monitor_memory(warning_threshold_gb=1.5, track_stats=True)
     def prepare_gen_img_embeds(self, image_ids: torch.LongTensor):
         return self.gen_aligner(self.gen_embed(image_ids))
 
