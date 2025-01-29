@@ -1,0 +1,304 @@
+/* Ensure full-screen, no scrolling */
+html, body {
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent scrolling */
+    background-color: black; /* Match chat background */
+    font-family: Arial, sans-serif; /* Improve readability */
+}
+
+/* Chat container setup */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Center chat box */
+.chat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-color: #000;
+    overflow: hidden;
+    padding: 20px;
+}
+
+/* Response messages container */
+.responses-container {
+    overflow-y: auto;
+    align-items: center;
+    width: 40%;
+    height: 100%;
+    border-radius: 1rem;
+    border: 1px solid #ccc;
+    background-color: #1e1e1e;
+    margin: 0 auto; /* Center horizontally */
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .chat-box {
+        padding: 10px;
+    }
+
+    .responses-container {
+        width: 100vw; /* Full width */
+        max-width: none;
+        border-radius: 0;
+        border: none;
+        height: calc(100vh - 120px); /* Adjust height for input and header */
+    }
+}
+
+/* Input container */
+.input-container {
+    display: flex;
+    padding: 10px;
+    width: 100%;
+    background-color: #242424;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Individual chat message */
+.chat-message {
+    display: flex;
+    align-items: top;
+    margin-bottom: 5px;
+    padding: 10px;
+    word-wrap: break-word;
+    position: relative; /* For positioning options popup */
+}
+
+/* Show message options on hover */
+.chat-message:hover .message-options {
+    display: flex;
+}
+
+/* Avatar styling */
+.message-avatar img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+
+.message-avatar .default-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #ccc;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+/* Message content */
+.message-content {
+    padding: 0;
+    width: auto;
+    max-width: 80%;
+    margin: 0;
+}
+
+/* Sender name */
+.message-sender {
+    font-weight: bold;
+    margin-bottom: 2px;
+    color: var(--arkavo-orange, red);
+}
+
+/* Timestamp */
+.message-timestamp {
+    font-size: 0.8em;
+    color: #888;
+    margin-left: 8px;
+}
+
+/* Message body */
+.message-body {
+    background-color: #333;
+    color:#eee;
+    padding: 8px 12px;
+    border-radius: 8px;
+    word-wrap: break-word;
+}
+
+/* Message options */
+.message-options {
+    display: none;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #444;
+    border-radius: 4px;
+    padding: 4px;
+    gap: 4px;
+}
+
+/* Option button */
+.option-button {
+    background-color: #555;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.option-button:hover {
+    background-color: #666;
+}
+
+/* Chat input field */
+.chat-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    resize: none;
+    font-size: 1.5rem;
+    margin-right: 10px;
+    background-color: #333;
+    color: #fff;
+}
+
+/* Send button */
+.send-button {
+    padding: 10px 15px;
+    background-color: var(--arkavo-dark-orange, red);
+    color: #fff;
+    border: none;
+    font-size: 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.send-button:hover {
+    background-color: darkred;
+}
+
+/* Combined input field */
+.combined-input {
+    position: relative;
+    align-items: center;
+    font-size: 1.5rem;
+    width: 100%;
+}
+
+.combined-input .chat-input {
+    flex: 1;
+    padding-right: 40px;
+    border: 1px solid #ccc;
+    font-size: 1.5rem;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+/* Dropdown button */
+.dropdown-button {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    width: 40px;
+    color: #333;
+    font-size: 1.5rem;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-left: none;
+    border-radius: 0 4px 4px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dropdown-button:hover {
+    background-color: #e0e0e0;
+}
+
+/* Dropdown menu */
+.dropdown-menu {
+    position: absolute;
+    background: black;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 1.5rem;
+    width: 100%;
+    z-index: 2000;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Dropdown item */
+.dropdown-item {
+    display: flex;
+    font-size: 1.5rem;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    background: #333;
+    color: #f0f0f0;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+}
+
+.dropdown-item:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
+/* Delete button */
+.delete-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.5rem;
+    color: red;
+}
+
+.delete-button:hover {
+    color: darkred;
+}
+
+/* Scrollbar for Webkit browsers (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+    width: 8px; /* Adjust width */
+    height: 8px; /* Adjust height for horizontal scrollbars */
+}
+
+/* Scrollbar track (background) */
+::-webkit-scrollbar-track {
+    background: #1a1a1a; /* Dark background */
+    border-radius: 4px; /* Rounded corners */
+}
+
+/* Scrollbar thumb (draggable handle) */
+::-webkit-scrollbar-thumb {
+    background: #666; /* Greyish thumb */
+    border-radius: 4px; /* Rounded corners */
+    transition: background 0.3s ease-in-out;
+}
+
+/* Hover effect */
+::-webkit-scrollbar-thumb:hover {
+    background: #888; /* Lighter grey on hover */
+}
+
+/* Firefox Scrollbar */
+* {
+    scrollbar-width: thin; /* Thinner scrollbar */
+    scrollbar-color: #666 #1a1a1a; /* Thumb color, Track color */
+}
