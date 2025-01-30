@@ -5,7 +5,13 @@ from PIL import Image
 from diffusers.models import AutoencoderKL
 import numpy as np
 
-cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+cuda_device = 'cpu' 
+if torch.cuda.is_available():
+    cuda_device = 'cuda'
+elif torch.backends.mps.is_available():
+    cuda_device = 'mps'
+else:
+    cuda_device = 'cpu'
 
 # Load model and processor
 model_path = "deepseek-ai/JanusFlow-1.3B"
