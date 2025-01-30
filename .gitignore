@@ -419,3 +419,6 @@ tags
 .vscode
 .github
 generated_samples/
+
+# gradio
+.gradio/
