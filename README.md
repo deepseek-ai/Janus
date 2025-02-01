@@ -298,6 +298,12 @@ pip install -e .[gradio]
 python demo/app_januspro.py
 ```
 
+For CPU only, you can run with the following command:
+
+```
+python demo/app_januspro_cpu_only.py
+```
+
 Have Fun!
 
 </details>
@@ -704,6 +710,12 @@ For the local gradio demo, you can run with the following command:
 pip install -e .[gradio]
 
 python demo/app_janusflow.py
+```
+
+For CPU only, you can run with the following command:
+
+```
+python demo/app_janusflow_cpu_only.py
 ```
 
 Have Fun!
