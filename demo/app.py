@@ -19,7 +19,7 @@ vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
 
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
-cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+cuda_device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 # Multimodal Understanding function
 @torch.inference_mode()
 # Multimodal Understanding function
