@@ -31,6 +31,7 @@ from transformers import (
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 from janus.janusflow.models.clip_encoder import CLIPVisionTower
 from janus.janusflow.models.uvit import ShallowUViTEncoder, ShallowUViTDecoder
+from janus.utils.cuda_memory_manager import monitor_memory
 import torch.nn as nn
 
 
@@ -168,6 +169,7 @@ class MultiModalityCausalLM(MultiModalityPreTrainedModel):
         )
         self.vision_gen_dec_aligner = nn.Linear(2048, 768, bias=True)
 
+    @monitor_memory(warning_threshold_gb=1.5, track_stats=True)
     def prepare_inputs_embeds(
         self,
         input_ids: torch.LongTensor,

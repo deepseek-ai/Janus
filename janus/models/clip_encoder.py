@@ -25,6 +25,9 @@ import torchvision.transforms
 from einops import rearrange
 
 from janus.models.siglip_vit import create_siglip_vit
+from janus.utils.cuda_memory_manager import (
+    monitor_memory,
+)
 
 
 class CLIPVisionTower(nn.Module):
@@ -104,6 +107,7 @@ class CLIPVisionTower(nn.Module):
             raise ValueError(f"Unexpected select feature: {self.select_feature}")
         return image_features
 
+    @monitor_memory(warning_threshold_gb=1.5, track_stats=True)
     def forward(self, images):
         """
 
