@@ -3,9 +3,8 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 from PIL import Image
-
 import numpy as np
-
+import random
 
 # Load model and processor
 model_path = "deepseek-ai/Janus-1.3B"
@@ -20,17 +19,23 @@ vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
 cuda_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+# Helper function to set the random seed
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.cuda.manual_seed(seed)
+
+
 # Multimodal Understanding function
 @torch.inference_mode()
-# Multimodal Understanding function
 def multimodal_understanding(image, question, seed, top_p, temperature):
     # Clear CUDA cache before generating
     torch.cuda.empty_cache()
     
-    # set seed
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
+    set_seed(seed)
     
     conversation = [
         {
@@ -45,7 +50,6 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
     ).to(cuda_device, dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16)
-    
     
     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
     
@@ -66,69 +70,16 @@ def multimodal_understanding(image, question, seed, top_p, temperature):
     return answer
 
 
-def generate(input_ids,
-             width,
-             height,
-             temperature: float = 1,
-             parallel_size: int = 5,
-             cfg_weight: float = 5,
-             image_token_num_per_image: int = 576,
-             patch_size: int = 16):
-    # Clear CUDA cache before generating
-    torch.cuda.empty_cache()
-    
-    tokens = torch.zeros((parallel_size * 2, len(input_ids)), dtype=torch.int).to(cuda_device)
-    for i in range(parallel_size * 2):
-        tokens[i, :] = input_ids
-        if i % 2 != 0:
-            tokens[i, 1:-1] = vl_chat_processor.pad_id
-    inputs_embeds = vl_gpt.language_model.get_input_embeddings()(tokens)
-    generated_tokens = torch.zeros((parallel_size, image_token_num_per_image), dtype=torch.int).to(cuda_device)
-
-    pkv = None
-    for i in range(image_token_num_per_image):
-        outputs = vl_gpt.language_model.model(inputs_embeds=inputs_embeds,
-                                             use_cache=True,
-                                             past_key_values=pkv)
-        pkv = outputs.past_key_values
-        hidden_states = outputs.last_hidden_state
-        logits = vl_gpt.gen_head(hidden_states[:, -1, :])
-        logit_cond = logits[0::2, :]
-        logit_uncond = logits[1::2, :]
-        logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
-        probs = torch.softmax(logits / temperature, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
-        generated_tokens[:, i] = next_token.squeeze(dim=-1)
-        next_token = torch.cat([next_token.unsqueeze(dim=1), next_token.unsqueeze(dim=1)], dim=1).view(-1)
-        img_embeds = vl_gpt.prepare_gen_img_embeds(next_token)
-        inputs_embeds = img_embeds.unsqueeze(dim=1)
-    patches = vl_gpt.gen_vision_model.decode_code(generated_tokens.to(dtype=torch.int),
-                                                 shape=[parallel_size, 8, width // patch_size, height // patch_size])
-
-    return generated_tokens.to(dtype=torch.int), patches
-
-def unpack(dec, width, height, parallel_size=5):
-    dec = dec.to(torch.float32).cpu().numpy().transpose(0, 2, 3, 1)
-    dec = np.clip((dec + 1) / 2 * 255, 0, 255)
-
-    visual_img = np.zeros((parallel_size, width, height, 3), dtype=np.uint8)
-    visual_img[:, :, :] = dec
-
-    return visual_img
-
-
-
+# Generate images function
 @torch.inference_mode()
-def generate_image(prompt,
-                   seed=None,
-                   guidance=5):
+def generate_image(prompt, seed=None, guidance=5):
     # Clear CUDA cache and avoid tracking gradients
     torch.cuda.empty_cache()
+    
     # Set the seed for reproducible results
     if seed is not None:
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        np.random.seed(seed)
+        set_seed(seed)
+    
     width = 384
     height = 384
     parallel_size = 5
@@ -152,12 +103,11 @@ def generate_image(prompt,
 
         return [Image.fromarray(images[i]).resize((1024, 1024), Image.LANCZOS) for i in range(parallel_size)]
 
-        
 
 # Gradio interface
 with gr.Blocks() as demo:
     gr.Markdown(value="# Multimodal Understanding")
-    # with gr.Row():
+    
     with gr.Row():
         image_input = gr.Image()
         with gr.Column():
@@ -184,10 +134,7 @@ with gr.Blocks() as demo:
         inputs=[question_input, image_input],
     )
     
-        
     gr.Markdown(value="# Text-to-Image Generation")
-
-    
     
     with gr.Row():
         cfg_weight_input = gr.Slider(minimum=1, maximum=10, value=5, step=0.5, label="CFG Weight")
@@ -200,11 +147,10 @@ with gr.Blocks() as demo:
     image_output = gr.Gallery(label="Generated Images", columns=2, rows=2, height=300)
 
     examples_t2i = gr.Examples(
-        label="Text to image generation examples. (Tips for designing prompts: Adding description like 'digital art' at the end of the prompt or writing the prompt in more detail can help produce better images!)",
+        label="Text to image generation examples",
         examples=[
             "Master shifu racoon wearing drip attire as a street gangster.",
-            "A cute and adorable baby fox with big brown eyes, autumn leaves in the background enchanting,immortal,fluffy, shiny mane,Petals,fairyism,unreal engine 5 and Octane Render,highly detailed, photorealistic, cinematic, natural colors.",
-            "The image features an intricately designed eye set against a circular backdrop adorned with ornate swirl patterns that evoke both realism and surrealism. At the center of attention is a strikingly vivid blue iris surrounded by delicate veins radiating outward from the pupil to create depth and intensity. The eyelashes are long and dark, casting subtle shadows on the skin around them which appears smooth yet slightly textured as if aged or weathered over time.\n\nAbove the eye, there's a stone-like structure resembling part of classical architecture, adding layers of mystery and timeless elegance to the composition. This architectural element contrasts sharply but harmoniously with the organic curves surrounding it. Below the eye lies another decorative motif reminiscent of baroque artistry, further enhancing the overall sense of eternity encapsulated within each meticulously crafted detail. \n\nOverall, the atmosphere exudes a mysterious aura intertwined seamlessly with elements suggesting timelessness, achieved through the juxtaposition of realistic textures and surreal artistic flourishes. Each component\u2014from the intricate designs framing the eye to the ancient-looking stone piece above\u2014contributes uniquely towards creating a visually captivating tableau imbued with enigmatic allure.",
+            "A cute and adorable baby fox with big brown eyes...",
         ],
         inputs=prompt_input,
     )
