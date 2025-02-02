@@ -103,7 +103,7 @@ Generation with Data and Model Scaling</b></a>
 ## 2. Model Download
 
 We release Janus to the public to support a broader and more diverse range of research within both academic and commercial communities.
-Please note that the use of this model is subject to the terms outlined in [License section](#5-license). Commercial usage is
+Please note that the use of this model is subject to the terms outlined in [License section](#4-license). Commercial usage is
 permitted under these terms.
 
 ### Huggingface
