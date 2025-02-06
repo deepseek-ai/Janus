@@ -118,8 +118,7 @@ permitted under these terms.
 
 
 ## 3. Quick Start
-<details>
-<summary><h3>Janus-Pro</h3></summary>
+
 
 ### Installation
 
@@ -708,7 +707,6 @@ python demo/app_janusflow.py
 
 Have Fun!
     
-</details>
 
 ## 4. License
 
