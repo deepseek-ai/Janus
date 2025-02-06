@@ -717,10 +717,11 @@ This code repository is licensed under [the MIT License](https://github.com/deep
 ## 5. Citation
 
 ```bibtex
-@misc{chen2025januspro,
-      title={Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling}, 
-      author={Xiaokang Chen and Zhiyu Wu and Xingchao Liu and Zizheng Pan and Wen Liu and Zhenda Xie and Xingkai Yu and Chong Ruan},
-      year={2025},
+@article{chen2025janus,
+  title={Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling},
+  author={Chen, Xiaokang and Wu, Zhiyu and Liu, Xingchao and Pan, Zizheng and Liu, Wen and Xie, Zhenda and Yu, Xingkai and Ruan, Chong},
+  journal={arXiv preprint arXiv:2501.17811},
+  year={2025}
 }
 
 @article{wu2024janus,
