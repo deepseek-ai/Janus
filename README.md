@@ -21,6 +21,9 @@
   <a href="https://huggingface.co/deepseek-ai" target="_blank">
     <img alt="Hugging Face" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-DeepSeek%20AI-ffc107?color=ffc107&logoColor=white" />
   </a>
+  <a href="https://replicate.com/deepseek-ai" target="_blank_">
+    <img src="https://replicate.com/deepseek-ai/janus-pro-7b/badge" alt="Replicate"/>
+  </a>
 
 </div>
 
