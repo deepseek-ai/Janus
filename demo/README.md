@@ -21,21 +21,32 @@ swift sft --model_type deepseek_janus_pro --model  <Janus-Pro-7B model path> --d
 full Fine tuning
 swift sft --model_type deepseek_janus_pro --model  <Janus-Pro-7B model path> --dataset <dataset path> --train_type  full
 
-##  4. swift model Service
-swift deploy --ckpt_dir <swift mod path>
 
 
-## 5. swift model Proxy Service
+##  4. swift model export 
+Export can merge two previously dispersed models into one model system
+swift export  --ckpt_dir <swift model path>
+
+##  5. swift model Service
+swift deploy --ckpt_dir <Export or Swift model path>
+
+
+##  6. swift model Proxy Service
+Create an empty uploads directory
 fastapi_swift.py
 
-## 6. Client API fastapi_client. py
-Submit questions and receive responses to the swift model Proxy Service using fastapi_client. py
+##  7. Client API fastapi_client. py
+Submit questions and receive responses to the swift model Proxy Service 
+using fastapi_client. py
 
 
-## Other1. 
-The parameters(seed、top_p、temperature ) are no longer useful, but in order to maintain interface reuse, they are retained
+##  Other1. 
+fastap_client.py parameters(seed、top_p、temperature ) are no longer useful, 
+but in order to maintain interface reuse, 
+they are retained
 
-## Other2. 
+##  Other2.
+If no export is performed, then:
 If the Swift model needs to change the directory, the configuration file needs to be changed
 Adapterconfig.json Modify 'base_madel_name_or_path'
 Args.json modifies 'model'
