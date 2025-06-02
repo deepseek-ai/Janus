@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface</title>
+    <link rel="stylesheet" href="./index.css">
+    <link rel="icon" type="image/png" href="/webui/favicon.ico">
+
+</head>
+<body>
+    <main class="chat-container">
+        <div class="chat-box">
+            <div class="input-container">
+                <div class="combined-input">
+                    <input id="apiUrlInput" class="chat-input" type="text" placeholder="Enter API URL" style="width: 100%;">
+                    <button id="dropdownButton" class="dropdown-button">▼</button>
+                    <div id="dropdownMenu" class="dropdown-menu" style="display: none;"></div>
+                </div>
+            </div>
+
+            <div id="responsesContainer" class="responses-container"></div>
+
+            <div class="input-container">
+                <textarea id="promptInput" class="chat-input" placeholder="Enter your prompt for image generation" rows="3"></textarea>
+                <button id="sendButton" class="send-button">Send</button>
+            </div>
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+        </div>
+    </main>
+
+    <script type="text/javascript" src="./APIChat.js"></script>
+
+</body>
+</html>

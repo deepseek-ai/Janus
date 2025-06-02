@@ -1,16 +1,23 @@
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 from PIL import Image
 import numpy as np
 import io
+import os
+
+# Resolve absolute path based on the script's location
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # This gets "demo/"
+WEBUI_DIR = os.path.join(BASE_DIR, "webui")  # Moves up to the project root
 
 app = FastAPI()
+app.mount("/webui", StaticFiles(directory=WEBUI_DIR, html=True), name="webui")
 
 # Load model and processor
-model_path = "deepseek-ai/Janus-1.3B"
+model_path = os.getenv("MODEL_NAME", "deepseek-ai/Janus-1.3B")
 config = AutoConfig.from_pretrained(model_path)
 language_config = config.language_config
 language_config._attn_implementation = 'eager'
@@ -63,7 +70,7 @@ def multimodal_understanding(image_data, question, seed, top_p, temperature):
     return answer
 
 
-@app.post("/understand_image_and_question/")
+@app.post("/understand_image_and_question")
 async def understand_image_and_question(
     file: UploadFile = File(...),
     question: str = Form(...),
@@ -152,7 +159,7 @@ def generate_image(prompt, seed, guidance):
         return [Image.fromarray(images[i]).resize((1024, 1024), Image.LANCZOS) for i in range(parallel_size)]
 
 
-@app.post("/generate_images/")
+@app.post("/generate_images")
 async def generate_images(
     prompt: str = Form(...),
     seed: int = Form(None),
