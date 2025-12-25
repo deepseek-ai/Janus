@@ -12,7 +12,7 @@ urls = {homepage = "https://github.com/deepseek-ai/Janus"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "torch>=2.0.1",
+    "torch>=2.1.0",
     "transformers>=4.38.2",
     "timm>=0.9.16",
     "accelerate",
