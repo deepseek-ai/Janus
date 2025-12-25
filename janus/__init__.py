@@ -18,12 +18,13 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-# check if python version is above 3.10
+__version__ = "1.0.0"
+
+# Patch collections module for Python 3.10+ compatibility
+# This is needed for some dependencies that use deprecated collections imports
 import sys
 
 if sys.version_info >= (3, 10):
-    print("Python version is above 3.10, patching the collections module.")
-    # Monkey patch collections
     import collections
     import collections.abc
 
