@@ -43,7 +43,7 @@ def multimodal_understanding(image_data, question, seed, top_p, temperature):
     pil_images = [Image.open(io.BytesIO(image_data))]
     prepare_inputs = vl_chat_processor(
         conversations=conversation, images=pil_images, force_batchify=True
-    ).to(cuda_device, dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16)
+    ).to(cuda_device, dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32)
     
     inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
     outputs = vl_gpt.language_model.generate(
