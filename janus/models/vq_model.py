@@ -451,7 +451,7 @@ def compute_entropy_loss(affinity, loss_type="softmax", temperature=0.01):
     flat_affinity = affinity.reshape(-1, affinity.shape[-1])
     flat_affinity /= temperature
     probs = F.softmax(flat_affinity, dim=-1)
-    log_probs = F.log_softmax(flat_affinity + 1e-5, dim=-1)
+    log_probs = F.log_softmax(flat_affinity, dim=-1)
     if loss_type == "softmax":
         target_probs = probs
     else:
