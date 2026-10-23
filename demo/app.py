@@ -13,8 +13,7 @@ config = AutoConfig.from_pretrained(model_path)
 language_config = config.language_config
 language_config._attn_implementation = 'eager'
 vl_gpt = AutoModelForCausalLM.from_pretrained(model_path,
-                                             language_config=language_config,
-                                             trust_remote_code=True)
+                                             language_config=language_config)
 vl_gpt = vl_gpt.to(torch.bfloat16).cuda()
 
 vl_chat_processor = VLChatProcessor.from_pretrained(model_path)
