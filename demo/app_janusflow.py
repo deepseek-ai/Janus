@@ -244,4 +244,5 @@ with gr.Blocks() as demo:
         outputs=image_output
     )
 
-demo.launch(share=True)
+# keep the demo local by default; set share=True yourself if you need a public link
+demo.launch(share=False)

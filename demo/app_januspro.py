@@ -241,5 +241,6 @@ with gr.Blocks() as demo:
         outputs=image_output
     )
 
-demo.launch(share=True)
+# keep the demo local by default; set share=True yourself if you need a public link
+demo.launch(share=False)
 # demo.queue(concurrency_count=1, max_size=10).launch(server_name="0.0.0.0", server_port=37906, root_path="/path")
