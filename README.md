@@ -661,7 +661,7 @@ def generate(
                                              attention_mask=attention_mask,
                                              past_key_values=None)
             past_key_values = []
-            for kv_cache in past_key_values:
+            for kv_cache in outputs.past_key_values:
                 k, v = kv_cache[0], kv_cache[1]
                 past_key_values.append((k[:, :, :inputs_embeds.shape[1], :], v[:, :, :inputs_embeds.shape[1], :]))
             past_key_values = tuple(past_key_values)
